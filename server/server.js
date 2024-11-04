@@ -31,7 +31,7 @@ app.post("/create-checkout-session", async (req, res) => {
     });
     // Define session configuration
     const sessionConfig = {
-      payment_method_types: ['card','eps'],
+      payment_method_types: ['card'],
       line_items: [
         {
           price: price.id,

@@ -4,7 +4,7 @@
   "description": "Stripe payment sample.",
   "main": "server.js",
   "scripts": {
-    "build":	"react-scripts build",
+    "build": "react-scripts build",
     "start": "nodemon server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "format": "prettier --write \"**/*.{js,jsx}\""

@@ -2,11 +2,15 @@ const express = require("express");
 const app = express();
 const { resolve } = require("path");
 const env = require("dotenv").config({ path: "./.env" });
+const cors = require("cors")
+
+
 
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY, {
   apiVersion: "2024-04-10",
 });
 
+app.use(cors());
 app.use(express.json());
 
 // Mock database for storing customer IDs

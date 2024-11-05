@@ -43,7 +43,7 @@ app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
 app.post("/create-checkout-session", async (req, res) => {
   try {
     // Retrieve existing customer by email or create a new one if not found
-    const email = "mbunwevicki@gmail.com";
+    const email = "Boris@gmail.com";
     let customer = (await stripe.customers.list({ email, limit: 1 })).data[0];
 
     if (!customer) {
@@ -78,18 +78,26 @@ app.post("/create-checkout-session", async (req, res) => {
       customer: customer.id,
       collection_method: 'send_invoice',
       days_until_due: 30,
-      pending_invoice_items_behavior: "include",
+      pending_invoice_items_behavior: 'include',
     });
 
-    console.log("invoice created:", invoice);
+    const updateInvoice = await stripe.invoices.update(
+      invoice.id,
+      {
+        auto_advance: false,
+      }
+    );
 
-    const invoiceItem = await stripe.invoiceItems.create({
-      customer: customer.id,
-      price: "price_1QEukSHcq0BpKt6rcYKFtISU",
-      invoice: invoice.id,
-    });
+    console.log("invoice succesfully updated:", updateInvoice),
+    console.log("updated invoice request id:", updateInvoice.lastResponse.requestId);
 
-    console.log("checking the invoice item: ", invoiceItem);
+    // const invoiceItem = await stripe.invoiceItems.create({
+    //   customer: customer.id,
+    //   price: "price_1QG06aHcq0BpKt6riIps2SJm",
+    //   invoice: invoice.id,
+    // });
+
+    // console.log("checking the invoice item: ", invoiceItem);
 
     const sendInvoice = await stripe.invoices.sendInvoice(invoice.id)
 

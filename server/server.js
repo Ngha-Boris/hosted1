@@ -2,48 +2,58 @@ const express = require("express");
 const app = express();
 const { resolve } = require("path");
 const env = require("dotenv").config({ path: "./.env" });
-const cors = require("cors");
-
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY, {
   apiVersion: "2024-04-10",
 });
 
-app.use(cors());
+app.use(express.static(process.env.STATIC_DIR));
 app.use(express.json());
 
-const customerDatabase = {}; // Replace this with your real database
+// Serve the home page
+app.get("/", (req, res) => {
+  const path = resolve(process.env.STATIC_DIR + "/index.html");
+  res.sendFile(path);
+});
 
-// Webhook endpoint to receive invoice.created events
+// Config endpoint to retrieve the publishable key
+app.get("/config", (req, res) => {
+  res.send({
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
+  });
+});
+
+// Webhook endpoint to receive Stripe events (e.g., invoice.created)
 app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
   const sig = req.headers["stripe-signature"];
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET; // Your webhook secret
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
   let event;
 
   try {
+    // Verify the event using the Stripe webhook secret
     event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
   } catch (err) {
     console.error("Webhook signature verification failed:", err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // Handle the event
+  // Handle the invoice.created event
   if (event.type === "invoice.created") {
     const invoice = event.data.object;
     console.log("Invoice created:", invoice.id);
 
-    // Perform any actions with the invoice here (e.g., log it, save to database, etc.)
+    // You can add any additional logic here, such as notifying your system or updating records.
   }
 
-  // Respond to Stripe to acknowledge receipt of the event
   res.json({ received: true });
 });
 
-// Checkout session creation endpoint
+
+// Endpoint to create a Checkout Session
 app.post("/create-checkout-session", async (req, res) => {
   try {
-    // Retrieve existing customer by email or create a new one if not found
-    const email = "Boris@gmail.com";
+    // Retrieve existing customer by email or create a new one
+    const email = "mbunwevicki@gmail.com";
     let customer = (await stripe.customers.list({ email, limit: 1 })).data[0];
 
     if (!customer) {
@@ -58,82 +68,127 @@ app.post("/create-checkout-session", async (req, res) => {
 
     const paymentMethod = await stripe.paymentMethods.attach(
       'pm_card_visa',
-      {
-        customer: customer.id,
-      }
+      { customer: customer.id }
     );
-   console.log("Payment method attached successfully:", paymentMethod);
+    console.log("Payment method attached successfully:", paymentMethod);
 
-    // Update the Customer's default Payment Method for invoices
+    // Set the default payment method for invoices
     const updateCustomer = await stripe.customers.update(customer.id, {
       invoice_settings: {
         default_payment_method: paymentMethod.id,
       },
     });
     console.log("Customer updated successfully:", updateCustomer);
-    const requestId = updateCustomer.lastResponse.requestId;
-    console.log("Request ID for updating customer:", requestId);
 
+    // Create an invoice
     const invoice = await stripe.invoices.create({
       customer: customer.id,
       collection_method: 'send_invoice',
       days_until_due: 30,
-      pending_invoice_items_behavior: 'include',
+      pending_invoice_items_behavior: "include",
     });
+    console.log("Invoice created:", invoice);
 
-    const updateInvoice = await stripe.invoices.update(
-      invoice.id,
-      {
-        auto_advance: false,
-      }
-    );
+    // Add an invoice item
+    const invoiceItem = await stripe.invoiceItems.create({
+      customer: customer.id,
+      price: "price_1QGHFpHcq0BpKt6raiXHqjOd",
+      invoice: invoice.id,
+    });
+    console.log("Invoice item created:", invoiceItem);
 
-    console.log("invoice succesfully updated:", updateInvoice),
-    console.log("updated invoice request id:", updateInvoice.lastResponse.requestId);
+    // Send the invoice to the customer
+    const sendInvoice = await stripe.invoices.sendInvoice(invoice.id);
+    console.log("Invoice sent to customer:", sendInvoice);
 
-    // const invoiceItem = await stripe.invoiceItems.create({
-    //   customer: customer.id,
-    //   price: "price_1QG06aHcq0BpKt6riIps2SJm",
-    //   invoice: invoice.id,
-    // });
+    // Create a Checkout Session for a subscription
+    const session = await stripe.checkout.sessions.create({
+      customer: customer.id,
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price: "price_1QEukSHcq0BpKt6rcYKFtISU",
+          quantity: 1,
+        },
+      ],
+      mode: "subscription",
+      success_url: `${req.headers.origin}/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${req.headers.origin}/cancel.html`,
+    });
+    console.log("Checkout Session created successfully:", session.id);
 
-    // console.log("checking the invoice item: ", invoiceItem);
-
-    const sendInvoice = await stripe.invoices.sendInvoice(invoice.id)
-
-    console.log("Sending invoice to the customer successfully: ", sendInvoice)
-
-
-  // Set up a payment method for future use in the subscription
-  const session = await stripe.checkout.sessions.create({
-    customer: customer.id,
-    payment_method_types: ["card"],
-    line_items: [
-      {
-        price: "price_1QEukSHcq0BpKt6rcYKFtISU", // Replace with a valid price ID
-        quantity: 1,
-      },
-    ],
-    mode: "subscription",
-    success_url: `${req.headers.origin}/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${req.headers.origin}/cancel.html`,
-  });
-
-  console.log("Checkout Session created successfully:", session.id);
-  res.json({ url: session.url });
-} catch (error) {
-  console.error("Error creating checkout session:", error.message);
-  res.status(500).json({ error: error.message });
-}
-
-const paymentIntent = await stripe.paymentIntents.create({
-  amount: 500,
-  currency: 'eur',
-  payment_method: 'pm_card_visa',
+    res.json({ url: session.url });
+  } catch (error) {
+    console.error("Error creating checkout session:", error.message);
+    res.status(500).json({ error: error.message });
+  }
 });
 
-console.log("Payment Intent created successfully:", paymentIntent);
+// Endpoint to create products and prices if they don’t exist
+app.post("/setup-products-prices", async (req, res) => {
+  try {
+    const existingProducts = await stripe.products.list();
+    const existingPrices = await stripe.prices.list();
 
+    const productNames = existingProducts.data.map((p) => p.name);
+
+    // Basic Product setup
+    if (!productNames.includes("Basic Product")) {
+      const basicProduct = await stripe.products.create({ name: "Basic Product" });
+      console.log("Basic Product created:", basicProduct.id);
+
+      await stripe.prices.create({
+        unit_amount: 500,
+        currency: "usd",
+        recurring: { interval: "month" },
+        product: basicProduct.id,
+      });
+
+      await stripe.prices.create({
+        unit_amount: 4900,
+        currency: "usd",
+        recurring: { interval: "year" },
+        product: basicProduct.id,
+      });
+    }
+
+    // Pro Product setup
+    if (!productNames.includes("Pro Product")) {
+      const proProduct = await stripe.products.create({ name: "Pro Product" });
+      console.log("Pro Product created:", proProduct.id);
+
+      await stripe.prices.create({
+        unit_amount: 1500,
+        currency: "usd",
+        recurring: { interval: "month" },
+        product: proProduct.id,
+      });
+
+      await stripe.prices.create({
+        unit_amount: 13900,
+        currency: "usd",
+        recurring: { interval: "year" },
+        product: proProduct.id,
+      });
+    }
+
+    // Add a free price if not existing
+    if (!existingPrices.data.some((price) => price.unit_amount === 0)) {
+      await stripe.prices.create({
+        unit_amount: 0,
+        currency: "usd",
+        product: existingProducts.data[0].id,
+      });
+    }
+
+    res.json({ message: "Products and Prices setup complete" });
+  } catch (error) {
+    console.error("Error setting up products and prices:", error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
-app.listen(5252, () => console.log(`Node server listening at http://localhost:5252`));
+// Start the server
+app.listen(5252, () =>
+  console.log(`Node server listening at http://localhost:5252`)
+);

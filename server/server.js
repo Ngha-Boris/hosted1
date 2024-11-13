@@ -22,79 +22,85 @@ app.get("/config", (req, res) => {
   });
 });
 // Endpoint to create a Checkout Session
-app.post("/create-checkout-session", async (req, res) => {
+app.post("/create-account", async (req, res) => {
+  const { email } = req.body;
+
   try {
-    // Retrieve existing customer by email or create a new one
-    const email = "mbunwevicki@gmail.com";
-    let customer = (await stripe.customers.list({ email, limit: 1 })).data[0];
-
-    if (!customer) {
-      customer = await stripe.customers.create({
-        name: "Boris",
-        email,
-      });
-      console.log("Customer created successfully:", customer.id);
-    } else {
-      console.log("Reusing existing customer:", customer.id);
-    }
-
-    const paymentMethod = await stripe.paymentMethods.attach(
-      'pm_card_visa',
-      { customer: customer.id }
-    );
-    console.log("Payment method attached successfully:", paymentMethod);
-
-    // Set the default payment method for invoices
-    const updateCustomer = await stripe.customers.update(customer.id, {
-      invoice_settings: {
-        default_payment_method: paymentMethod.id,
-      },
+    // Step 1: Create a new Express account
+    const account = await stripe.accounts.create({
+      type: "express",
+      country: "US",
+      email: email,
     });
-    console.log("Customer updated successfully:", updateCustomer);
 
-    // Create an invoice
-    const invoice = await stripe.invoices.create({
-      customer: customer.id,
-      collection_method: 'send_invoice',
-      days_until_due: 30,
-      pending_invoice_items_behavior: "include",
+    console.log("Account created successfully:", account.id);
+
+    // Step 2: Create an account link for onboarding
+    const accountLink = await stripe.accountLinks.create({
+      account: account.id,
+      refresh_url: "http://localhost:5252/onboarding/refresh",
+      return_url: "http://localhost:5252/onboarding/return",
+      type: "account_onboarding",
     });
-    console.log("Invoice created:", invoice);
 
-    // Add an invoice item
-    const invoiceItem = await stripe.invoiceItems.create({
-      customer: customer.id,
-      price: "price_1QGHFpHcq0BpKt6raiXHqjOd",
-      invoice: invoice.id,
+    console.log("Account onboarding link created:", accountLink.url);
+
+    res.json({
+      accountId: account.id,
+      onboardingLink: accountLink.url,
     });
-    console.log("Invoice item created:", invoiceItem);
-
-    // Send the invoice to the customer
-    const sendInvoice = await stripe.invoices.sendInvoice(invoice.id);
-    console.log("Invoice sent to customer:", sendInvoice);
-
-    // Create a Checkout Session for a subscription
-    const session = await stripe.checkout.sessions.create({
-      customer: customer.id,
-      payment_method_types: ["card"],
-      line_items: [
-        {
-          price: "price_1QEukSHcq0BpKt6rcYKFtISU",
-          quantity: 1,
-        },
-      ],
-      mode: "subscription",
-      success_url: `${req.headers.origin}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${req.headers.origin}/cancel.html`,
-    });
-    console.log("Checkout Session created successfully:", session.id);
-
-    res.json({ url: session.url });
   } catch (error) {
-    console.error("Error creating checkout session:", error.message);
+    console.error("Error creating account or onboarding link:", error.message);
     res.status(500).json({ error: error.message });
   }
 });
+
+// Endpoint to create a Login Link for the Express account
+app.post("/create-login-link", async (req, res) => {
+  const { accountId } = req.body;
+
+  try {
+    // Create the login link
+    const loginLink = await stripe.accounts.createLoginLink(accountId);
+    console.log("Login Link created:", loginLink.url);
+
+    res.json({ loginLink: loginLink.url });
+  } catch (error) {
+    console.error("Error creating login link:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Endpoint to create a Destination Charge
+app.post("/create-destination-charge", async (req, res) => {
+  const { accountId, amount, currency, customerId, sourceId } = req.body;
+
+  try {
+    // Create a Destination Charge
+    const charge = await stripe.charges.create(
+      {
+        amount: amount,
+        currency: currency,
+        customer: customerId,   // Optional: if charging an existing customer
+        source: sourceId,       // Optional: if using a specific payment source
+        description: "Destination Charge for connected account",
+        transfer_data: {
+          destination: accountId,
+        },
+      },
+      {
+        stripeAccount: accountId, // Specifies the connected account
+      }
+    );
+
+    console.log("Destination Charge created:", charge.id);
+    res.json({ chargeId: charge.id });
+  } catch (error) {
+    console.error("Error creating destination charge:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 // Start the server
 app.listen(5252, () =>

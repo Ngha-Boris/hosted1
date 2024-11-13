@@ -21,34 +21,6 @@ app.get("/config", (req, res) => {
     publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
   });
 });
-
-// Webhook endpoint to receive Stripe events (e.g., invoice.created)
-app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
-  const sig = req.headers["stripe-signature"];
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-  let event;
-
-  try {
-    // Verify the event using the Stripe webhook secret
-    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-  } catch (err) {
-    console.error("Webhook signature verification failed:", err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  // Handle the invoice.created event
-  if (event.type === "invoice.created") {
-    const invoice = event.data.object;
-    console.log("Invoice created:", invoice.id);
-
-    // You can add any additional logic here, such as notifying your system or updating records.
-  }
-
-  res.json({ received: true });
-});
-
-
 // Endpoint to create a Checkout Session
 app.post("/create-checkout-session", async (req, res) => {
   try {

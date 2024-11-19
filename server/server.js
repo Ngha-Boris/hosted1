@@ -36,8 +36,6 @@ app.post("/create-checkout-session", async (req, res) => {
         },
       ],
       mode: "payment",
-      success_url: `${req.headers.origin}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${req.headers.origin}/cancel`,
     };
 
     // Create the Checkout Session
@@ -95,19 +93,6 @@ app.post("/create-login-link", async (req, res) => {
     console.error("Error creating login link:", error.message);
     res.status(500).json({ error: error.message });
   }
-});
-
-app.get("/success", (req, res) => {
-  res.sendFile(path.join(reactAppPath, "index.html"));
-});
-
-app.get("/cancel", (req, res) => {
-  res.sendFile(path.join(reactAppPath, "index.html"));
-});
-
-// Handle React routing for undefined server routes
-app.get("*", (req, res) => {
-  res.sendFile(path.join(reactAppPath, "index.html"));
 });
 
 // Start the server

@@ -36,6 +36,8 @@ app.post("/create-checkout-session", async (req, res) => {
         },
       ],
       mode: "payment",
+      success_url: `${req.headers.origin}/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${req.headers.origin}/cancel`,
     };
 
     // Create the Checkout Session
@@ -94,7 +96,6 @@ app.post("/create-login-link", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
 // Start the server
 app.listen(5252, () => {
   console.log(`Node server listening at http://localhost:5252`);

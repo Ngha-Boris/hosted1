@@ -96,6 +96,10 @@ app.post("/create-login-link", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+app.get('/Success', async (req, res) => {
+  res.send('Payment successful!')
+})
 // Start the server
 app.listen(5252, () => {
   console.log(`Node server listening at http://localhost:5252`);

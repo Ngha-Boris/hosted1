@@ -1,27 +1,36 @@
 const express = require("express");
-const app = express();
-const env = require("dotenv").config({ path: "./.env" });
 const cors = require("cors");
+const dotenv = require("dotenv");
+const stripe = require("stripe");
 
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY, {
+// Load environment variables
+dotenv.config({ path: "./.env" });
+const app = express();
+const stripeClient = stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: "2024-04-10",
 });
 
-app.use(cors());
+// Middleware
+app.use(cors({
+  origin: "https://valsuh45.github.io", // Replace with your GitHub Pages URL
+}));
 app.use(express.json());
+
+// Define the base path for your client-side application
+const CLIENT_BASE_PATH = "/Stripe-Exercise-3";
 
 // Endpoint to create a Checkout Session
 app.post("/create-checkout-session", async (req, res) => {
   try {
     // Create a product
-    const product = await stripe.products.create({
-      name: "Custom Product",
-      description: "Multi-currency product",
+    const product = await stripeClient.products.create({
+      name: "Ticket price",
+      description: "This is how much you ticket cost",
     });
 
     // Create a price for the product
-    const price = await stripe.prices.create({
-      unit_amount: 1000,
+    const price = await stripeClient.prices.create({
+      unit_amount: 1000, // Amount in smallest currency unit (e.g., cents for USD)
       currency: "usd",
       product: product.id,
     });
@@ -36,37 +45,34 @@ app.post("/create-checkout-session", async (req, res) => {
         },
       ],
       mode: "payment",
-      success_url: `${req.headers.origin}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${req.headers.origin}/cancel`,
+      success_url: `${req.headers.origin}${CLIENT_BASE_PATH}/Success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${req.headers.origin}${CLIENT_BASE_PATH}/Cancel`,
     };
 
     // Create the Checkout Session
-    const session = await stripe.checkout.sessions.create(sessionConfig);
+    const session = await stripeClient.checkout.sessions.create(sessionConfig);
 
     // Send the Checkout URL to the client
-    res.send({ url: session.url });
+    res.json({ url: session.url });
   } catch (error) {
     console.error("Error creating Checkout Session:", error.message);
-    res.status(400).send({
+    res.status(400).json({
       error: { message: error.message, requestId: error.requestId },
     });
   }
 });
 
-// Endpoint to create a new Express account and onboarding link
+// Example Endpoint to Create an Account (if applicable)
 app.post("/create-account", async (req, res) => {
   const { email } = req.body;
-
   try {
-    // Create a new Express account
-    const account = await stripe.accounts.create({
+    const account = await stripeClient.accounts.create({
       type: "express",
       country: "DE",
       email: email,
     });
 
-    // Create an onboarding link
-    const accountLink = await stripe.accountLinks.create({
+    const accountLink = await stripeClient.accountLinks.create({
       account: account.id,
       refresh_url: "http://localhost:5252/onboarding/refresh",
       return_url: "http://localhost:5252/onboarding/return",
@@ -83,13 +89,11 @@ app.post("/create-account", async (req, res) => {
   }
 });
 
-// Endpoint to create a Login Link for the Express account
+// Example Endpoint to Create a Login Link for an Account
 app.post("/create-login-link", async (req, res) => {
   const { accountId } = req.body;
-
   try {
-    // Create the login link
-    const loginLink = await stripe.accounts.createLoginLink(accountId);
+    const loginLink = await stripeClient.accounts.createLoginLink(accountId);
     res.json({ loginLink: loginLink.url });
   } catch (error) {
     console.error("Error creating login link:", error.message);
@@ -97,10 +101,8 @@ app.post("/create-login-link", async (req, res) => {
   }
 });
 
-app.get('/Success', async (req, res) => {
-  res.send('Payment successful!')
-})
 // Start the server
-app.listen(5252, () => {
-  console.log(`Node server listening at http://localhost:5252`);
+const PORT = process.env.PORT || 5252;
+app.listen(PORT, () => {
+  console.log(`Node server is running at http://localhost:${PORT}`);
 });

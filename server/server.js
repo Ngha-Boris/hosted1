@@ -12,7 +12,7 @@ const stripeClient = stripe(process.env.STRIPE_SECRET_KEY, {
 
 // Middleware
 app.use(cors({
-  origin: "https://valsuh45.github.io", // Replace with your GitHub Pages URL
+  origin: "https://Valsuh45.github.io",
 }));
 app.use(express.json());
 

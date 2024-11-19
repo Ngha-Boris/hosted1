@@ -10,7 +10,6 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY, {
 app.use(cors());
 app.use(express.json());
 
-
 // Endpoint to create a Checkout Session
 app.post("/create-checkout-session", async (req, res) => {
   try {
@@ -38,7 +37,7 @@ app.post("/create-checkout-session", async (req, res) => {
       ],
       mode: "payment",
       success_url: `${req.headers.origin}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${req.headers.origin}/cancel.html`,
+      cancel_url: `${req.headers.origin}/cancel`,
     };
 
     // Create the Checkout Session
@@ -98,6 +97,20 @@ app.post("/create-login-link", async (req, res) => {
   }
 });
 
+app.get("/success", (req, res) => {
+  res.sendFile(path.join(reactAppPath, "index.html"));
+});
+
+app.get("/cancel", (req, res) => {
+  res.sendFile(path.join(reactAppPath, "index.html"));
+});
+
+// Handle React routing for undefined server routes
+app.get("*", (req, res) => {
+  res.sendFile(path.join(reactAppPath, "index.html"));
+});
+
+// Start the server
 app.listen(5252, () => {
   console.log(`Node server listening at http://localhost:5252`);
 });
